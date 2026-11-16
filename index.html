@@ -1,0 +1,943 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador SCADA & PLC Industrial - Línea de Envasado</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes conveyorMove {
+      0% { background-position: 0 0; }
+      100% { background-position: 40px 0; }
+    }
+    .conveyor-belt-anim {
+      background-image: repeating-linear-gradient(90deg, #334155, #334155 10px, #1e293b 10px, #1e293b 20px);
+      background-size: 40px 100%;
+      animation: conveyorMove 1s linear infinite;
+    }
+    .conveyor-stopped {
+      animation-play-state: paused;
+    }
+    .contact-on {
+      color: #22c55e !important;
+      border-color: #22c55e !important;
+      background: rgba(34, 197, 94, 0.15) !important;
+      box-shadow: 0 0 6px rgba(34, 197, 94, 0.4);
+    }
+    .coil-on {
+      color: #22c55e !important;
+      border-color: #22c55e !important;
+      background: rgba(34, 197, 94, 0.25) !important;
+      box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+    }
+    /* Modal Backdrop Animation */
+    .modal-enter {
+      animation: fadeIn 0.2s ease-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-3 md:p-6 font-sans">
+  <div class="max-w-7xl mx-auto space-y-5">
+
+    <!-- Top Navigation / Executive Header -->
+    <header class="bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-5 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1 flex-wrap">
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-wider uppercase bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+            DEMO INDUSTRIAL B2B
+          </span>
+          <span class="px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-sky-500/10 text-sky-400 border border-sky-500/20">
+            PLC IEC 61131-3 + SCADA
+          </span>
+          <span id="badge-mode" class="px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            MODO: AUTOMÁTICO
+          </span>
+        </div>
+        <h1 class="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+          🏭 Gemelo Digital & PLC: Línea de Envasado y Rechazo por Control de Calidad
+        </h1>
+        <p class="text-xs md:text-sm text-slate-400">
+          Proceso repetitivo continuo: Dosificado volumétrico ➔ Tapado neumático ➔ Inspección de calidad ➔ Desvío de rechazos.
+        </p>
+      </div>
+
+      <!-- Quick Action Controls & Instructivo Button -->
+      <div class="flex flex-wrap items-center gap-2.5 bg-slate-950 p-2.5 rounded-xl border border-slate-800">
+        <!-- BOTÓN DESTACADO: INSTRUCTIVO -->
+        <button onclick="openManualModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3.5 py-2 rounded-lg text-xs flex items-center gap-1.5 transition shadow-lg shadow-indigo-900/40 border border-indigo-400/40 animate-pulse">
+          <span>📖</span> Instructivo / Guía
+        </button>
+        <!-- BOTÓN TOUR 1-CLIC -->
+        <button onclick="startAutoDemoTour()" class="bg-amber-600 hover:bg-amber-500 text-white font-semibold px-3 py-2 rounded-lg text-xs flex items-center gap-1.5 transition shadow">
+          <span>✨</span> Demo Guiada
+        </button>
+
+        <div class="h-6 w-px bg-slate-800 mx-1"></div>
+
+        <button id="btn-start" onclick="startSystem()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-3.5 py-2 rounded-lg text-xs flex items-center gap-1.5 transition shadow">
+          <span>▶</span> RUN
+        </button>
+        <button id="btn-stop" onclick="stopSystem()" class="bg-slate-700 hover:bg-slate-600 text-white font-medium px-3 py-2 rounded-lg text-xs flex items-center gap-1.5 transition">
+          <span>⏸</span> PAUSA
+        </button>
+        <button id="btn-estop" onclick="toggleEStop()" class="bg-red-700 hover:bg-red-600 text-white font-black px-3.5 py-2 rounded-lg text-xs flex items-center gap-1.5 transition shadow-lg shadow-red-950/50">
+          <span>🛑</span> E-STOP
+        </button>
+      </div>
+    </header>
+
+    <!-- Banner de bienvenida para Partners -->
+    <div id="partner-welcome-banner" class="bg-gradient-to-r from-indigo-950/60 via-slate-900 to-slate-950 border border-indigo-500/30 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl p-2 bg-indigo-500/20 rounded-lg border border-indigo-500/30">👋</span>
+        <div>
+          <h2 class="text-xs font-bold text-white uppercase tracking-wider">Bienvenido a la prueba interactiva del Simulador PLC</h2>
+          <p class="text-xs text-slate-300">
+            Puedes probar la máquina tú mismo inyectando fallas o abrir el <strong class="text-indigo-400 cursor-pointer underline" onclick="openManualModal()">Instructivo Integrado</strong> para ver la explicación paso a paso.
+          </p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openManualModal()" class="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-3 py-1.5 rounded-lg transition whitespace-nowrap">
+          Leer Instructivo ➔
+        </button>
+        <button onclick="document.getElementById('partner-welcome-banner').style.display='none'" class="text-slate-500 hover:text-slate-300 text-xs px-2 py-1">
+          ✕
+        </button>
+      </div>
+    </div>
+
+    <!-- Industrial KPI Dashboard (OEE, Production Rate, Quality Rate) -->
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow">
+        <span class="text-[11px] font-mono uppercase text-slate-400 block">Total Producido</span>
+        <span id="kpi-total" class="text-2xl font-bold font-mono text-white mt-1 block">0</span>
+        <span class="text-[10px] text-slate-500">Unidades procesadas</span>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow">
+        <span class="text-[11px] font-mono uppercase text-slate-400 block">Conformes (OK)</span>
+        <span id="kpi-good" class="text-2xl font-bold font-mono text-emerald-400 mt-1 block">0</span>
+        <span class="text-[10px] text-emerald-600 font-semibold">Listas para empaque</span>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow">
+        <span class="text-[11px] font-mono uppercase text-slate-400 block">Rechazadas (NG)</span>
+        <span id="kpi-reject" class="text-2xl font-bold font-mono text-rose-400 mt-1 block">0</span>
+        <span class="text-[10px] text-rose-500">Separadas por defecto</span>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow">
+        <span class="text-[11px] font-mono uppercase text-slate-400 block">Tasa de Calidad</span>
+        <span id="kpi-quality" class="text-2xl font-bold font-mono text-sky-400 mt-1 block">100%</span>
+        <span class="text-[10px] text-slate-500">Meta: &gt; 98.5%</span>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow">
+        <span class="text-[11px] font-mono uppercase text-slate-400 block">Velocidad Actual</span>
+        <span id="kpi-ppm" class="text-2xl font-bold font-mono text-amber-400 mt-1 block">36 PPM</span>
+        <span class="text-[10px] text-slate-500">Botellas por minuto</span>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow">
+        <span class="text-[11px] font-mono uppercase text-slate-400 block">Disponibilidad OEE</span>
+        <span id="kpi-oee" class="text-2xl font-bold font-mono text-indigo-400 mt-1 block">99.2%</span>
+        <span class="text-[10px] text-slate-500">Eficiencia en línea</span>
+      </div>
+    </div>
+
+    <!-- Main Section: Digital Twin View & Partner Test Injection Panel -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+      
+      <!-- Digital Twin Stage (Conveyor & 4 Industrial Stations) -->
+      <div class="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between space-y-4">
+        
+        <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+            <h2 class="font-bold text-sm tracking-wide text-white uppercase font-mono">
+              Vista del Proceso en Planta (Gemelo Digital)
+            </h2>
+          </div>
+          <span id="scada-state-badge" class="px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono">
+            ESTADO: EN EJECUCIÓN CONTINUA
+          </span>
+        </div>
+
+        <!-- Animated Factory Line Canvas -->
+        <div class="relative w-full h-80 bg-slate-950 rounded-xl border border-slate-800 overflow-hidden p-4 flex flex-col justify-between select-none">
+          
+          <!-- Upper Mechanical Structures: Station Actuators -->
+          <div class="grid grid-cols-4 gap-2 text-center relative z-10">
+            
+            <!-- Station 1: Dosificadora -->
+            <div class="flex flex-col items-center">
+              <span class="text-[10px] font-mono text-slate-400 font-bold">EST. 1: DOSIFICADO</span>
+              <div class="w-16 h-12 bg-slate-800 border-2 border-slate-700 rounded-t-lg relative mt-1 flex flex-col items-center justify-end">
+                <span class="text-[9px] text-sky-300 font-mono">%Q0.2 VÁLVULA</span>
+                <div id="nozzle-pipe" class="w-2.5 h-4 bg-slate-500 border-x border-slate-400"></div>
+                <div id="liquid-stream" class="w-1.5 h-7 bg-amber-400 opacity-0 transition-opacity absolute -bottom-7 shadow-[0_0_8px_#f59e0b]"></div>
+              </div>
+              <span id="tag-st1" class="text-[9px] font-mono text-slate-400 mt-1 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">S1: Espera</span>
+            </div>
+
+            <!-- Station 2: Tapadora Neumática -->
+            <div class="flex flex-col items-center">
+              <span class="text-[10px] font-mono text-slate-400 font-bold">EST. 2: TAPADORA</span>
+              <div class="w-16 h-12 bg-slate-800 border-2 border-slate-700 rounded-t-lg relative mt-1 flex flex-col items-center justify-end">
+                <span class="text-[9px] text-amber-300 font-mono">%Q0.3 CILINDRO</span>
+                <div id="capper-rod" class="w-3 h-3 bg-slate-400 border border-slate-300 transition-all duration-300"></div>
+                <div id="capper-head" class="w-8 h-2 bg-rose-500 rounded-sm border border-rose-300 transition-all duration-300"></div>
+              </div>
+              <span id="tag-st2" class="text-[9px] font-mono text-slate-400 mt-1 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">S2: Espera</span>
+            </div>
+
+            <!-- Station 3: Inspección Óptica / Visión Artificial -->
+            <div class="flex flex-col items-center">
+              <span class="text-[10px] font-mono text-slate-400 font-bold">EST. 3: VISIÓN (QC)</span>
+              <div class="w-16 h-12 bg-slate-800 border-2 border-slate-700 rounded-t-lg relative mt-1 flex flex-col items-center justify-center">
+                <div class="w-6 h-6 rounded-full bg-slate-950 border border-slate-700 flex items-center justify-center">
+                  <span class="w-2.5 h-2.5 rounded-full bg-sky-500" id="vision-eye"></span>
+                </div>
+                <div id="vision-laser" class="w-0.5 h-10 bg-rose-500 absolute -bottom-10 opacity-0 transition-opacity shadow-[0_0_8px_#f43f5e]"></div>
+              </div>
+              <span id="tag-st3" class="text-[9px] font-mono text-slate-400 mt-1 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">S3: Verificando</span>
+            </div>
+
+            <!-- Station 4: Rechazo Neumático -->
+            <div class="flex flex-col items-center">
+              <span class="text-[10px] font-mono text-slate-400 font-bold">EST. 4: RECHAZO</span>
+              <div class="w-16 h-12 bg-slate-800 border-2 border-slate-700 rounded-t-lg relative mt-1 flex flex-col items-center justify-end">
+                <span class="text-[9px] text-rose-300 font-mono">%Q0.5 PISTÓN</span>
+                <div id="reject-pusher" class="w-10 h-3 bg-amber-500 rounded border border-amber-300 transition-all duration-200 transform translate-y-0"></div>
+              </div>
+              <span id="tag-st4" class="text-[9px] font-mono text-slate-400 mt-1 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-800">S4: Espera</span>
+            </div>
+
+          </div>
+
+          <!-- Middle: Conveyor Belt & Traveling Bottles -->
+          <div class="relative my-auto">
+            <div class="h-10 w-full bg-slate-800 rounded border-y-2 border-slate-600 relative overflow-hidden flex items-center">
+              <div id="conveyor-track" class="w-full h-full conveyor-belt-anim"></div>
+            </div>
+            <div id="bottles-container" class="absolute inset-0 pointer-events-none -top-12 h-14">
+              <!-- Dynamically populated via JS -->
+            </div>
+          </div>
+
+          <!-- Bottom: Destination Trays -->
+          <div class="grid grid-cols-2 gap-4 pt-2 border-t border-slate-800">
+            <!-- Packaging Line -->
+            <div class="bg-emerald-950/30 border border-emerald-800/40 rounded-lg p-2.5 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">📦</span>
+                <div>
+                  <div class="text-xs font-bold text-emerald-300">Salida a Empaque Final (OK)</div>
+                  <div class="text-[10px] text-slate-400">Productos con nivel y tapado correcto</div>
+                </div>
+              </div>
+              <span id="tray-ok" class="text-sm font-mono font-bold text-emerald-400">0 botellas</span>
+            </div>
+
+            <!-- Rejection Scrap Chute -->
+            <div class="bg-rose-950/30 border border-rose-800/40 rounded-lg p-2.5 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-xl">🗑️</span>
+                <div>
+                  <div class="text-xs font-bold text-rose-300">Rampa de Rechazo (NG)</div>
+                  <div class="text-[10px] text-slate-400">Defectos expulsados automáticamente</div>
+                </div>
+              </div>
+              <span id="tray-ng" class="text-sm font-mono font-bold text-rose-400">0 botellas</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Realtime Industrial Telemetry Log -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 font-mono text-xs flex items-center justify-between">
+          <span class="text-slate-500 font-bold uppercase">PLC Event Log:</span>
+          <span id="sys-log" class="text-emerald-400 truncate max-w-xl">Sistema inicializado en modo AUTOMÁTICO. Cinta transportadora en marcha.</span>
+        </div>
+
+      </div>
+
+      <!-- Partner Interaction Panel (Inyección de Fallas & Pruebas en Vivo) -->
+      <div class="lg:col-span-4 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl flex flex-col justify-between space-y-4">
+        
+        <div>
+          <div class="border-b border-slate-800 pb-3 mb-4">
+            <h2 class="font-bold text-sm tracking-wide text-white uppercase font-mono flex items-center gap-2">
+              <span>🎛️</span> Panel de Pruebas para Socios
+            </h2>
+            <p class="text-xs text-slate-400 mt-1">
+              Haz clic en los botones para probar la toma de decisiones autónoma del PLC:
+            </p>
+          </div>
+
+          <!-- Test Actions Buttons -->
+          <div class="space-y-3">
+            
+            <!-- Inyectar Defecto 1: Bajo Nivel -->
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-amber-300">Prueba 1: Defecto de Llenado</span>
+                <span class="text-[10px] font-mono text-slate-500">Sensor %I0.5</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Genera una botella con volumen insuficiente para probar la estación de inspección.</p>
+              <button onclick="injectUnderfill()" class="w-full bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 border border-amber-500/40 font-semibold py-1.5 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
+                <span>⚠️</span> Inyectar Botella con Nivel Bajo
+              </button>
+            </div>
+
+            <!-- Inyectar Defecto 2: Sin Tapa -->
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-rose-300">Prueba 2: Falla de Tapado</span>
+                <span class="text-[10px] font-mono text-slate-500">Sensor %I0.6</span>
+              </div>
+              <p class="text-[11px] text-slate-400">Simula una botella que no recibió tapa para activar el expulsor neumático.</p>
+              <button onclick="injectMissingCap()" class="w-full bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 border border-rose-500/40 font-semibold py-1.5 px-3 rounded-lg text-xs transition flex items-center justify-center gap-1.5">
+                <span>❌</span> Inyectar Botella Sin Tapa
+              </button>
+            </div>
+
+            <!-- Variador de Frecuencia (Velocidad de Cinta) -->
+            <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-sky-300">Variador de Frecuencia (VFD)</span>
+                <span id="speed-label" class="text-xs font-mono text-emerald-400 font-bold">50 Hz (100%)</span>
+              </div>
+              <input type="range" id="vfd-speed" min="20" max="80" value="50" oninput="changeSpeed(this.value)" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-sky-500">
+              <div class="flex justify-between text-[10px] text-slate-500 font-mono">
+                <span>20 Hz (Lenta)</span>
+                <span>50 Hz (Nominal)</span>
+                <span>80 Hz (Rápida)</span>
+              </div>
+            </div>
+
+            <!-- Descargar Datos para ERP/MES -->
+            <button onclick="downloadReport()" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-medium py-2 px-3 rounded-lg text-xs transition flex items-center justify-center gap-2">
+              <span>📊</span> Exportar Datos de Producción (CSV / ERP)
+            </button>
+
+          </div>
+        </div>
+
+        <!-- Instructivo shortcut card -->
+        <div class="bg-indigo-950/40 border border-indigo-800/40 p-3 rounded-xl text-[11px] space-y-1.5 flex items-center justify-between">
+          <div>
+            <span class="text-indigo-300 font-bold block">¿Primera vez usando el simulador?</span>
+            <p class="text-slate-400">Abre el manual interactivo con la guía de 5 pasos.</p>
+          </div>
+          <button onclick="openManualModal()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2.5 py-1 rounded text-xs transition whitespace-nowrap">
+            Abrir
+          </button>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- Live Ladder Logic Monitor (IEC 61131-3) -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-2xl">
+      <div class="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800 pb-3 mb-4 gap-2">
+        <div>
+          <h2 class="font-bold text-base text-white font-mono flex items-center gap-2">
+            <span>⚡</span> Monitor de Lógica Ladder en Vivo (Power Flow IEC 61131-3)
+          </h2>
+          <p class="text-xs text-slate-400">
+            Señales visualizadas en tiempo real: los contactos cerrados y bobinas activas se energizan en color verde.
+          </p>
+        </div>
+        <div class="flex items-center gap-3 text-xs font-mono">
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 bg-emerald-500 rounded-sm"></span> Conduce Corriente (1)</span>
+          <span class="flex items-center gap-1.5"><span class="w-3 h-3 bg-slate-700 rounded-sm"></span> Abierto (0)</span>
+        </div>
+      </div>
+
+      <!-- Ladder Rungs -->
+      <div class="space-y-3 font-mono text-xs overflow-x-auto">
+        <!-- Rung 1: Cinta Transportadora -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div class="flex justify-between text-[11px] text-slate-400 mb-1.5">
+            <span class="font-bold text-sky-400">RUNG 001: Control de Marcha de Cinta Transportadora</span>
+            <span>%Q0.0 = (SYS_RUN AND NOT E_STOP AND NOT OVERLOAD)</span>
+          </div>
+          <div class="flex items-center gap-2 py-1">
+            <div class="w-1.5 h-9 bg-emerald-500 rounded"></div>
+            <div id="c-r1-run" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[75px]"><div class="text-[8px] text-slate-400">%M0.0 [ | ]</div><div>SYS_RUN</div></div>
+            <div class="w-3 h-0.5 bg-slate-700"></div>
+            <div id="c-r1-estop" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[75px]"><div class="text-[8px] text-slate-400">%I0.0 [ / ]</div><div>E_STOP</div></div>
+            <div class="w-3 h-0.5 bg-slate-700"></div>
+            <div id="c-r1-safety" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[85px]"><div class="text-[8px] text-slate-400">%I0.1 [ / ]</div><div>CORTINA_OK</div></div>
+            <div class="flex-1 h-0.5 bg-slate-700"></div>
+            <div id="coil-r1-conveyor" class="border border-slate-700 bg-slate-900 px-3 py-1 rounded-full text-center min-w-[110px]"><div class="text-[8px] text-slate-400">%Q0.0 ( )</div><div class="font-bold">M_CONVEYOR</div></div>
+            <div class="w-1.5 h-9 bg-slate-700 rounded"></div>
+          </div>
+        </div>
+
+        <!-- Rung 2: Dosificado -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div class="flex justify-between text-[11px] text-slate-400 mb-1.5">
+            <span class="font-bold text-sky-400">RUNG 002: Dosificado Volumétrico Temporizado</span>
+            <span>%Q0.2 = SYS_RUN AND SENSOR_BOTELLA_1 AND NOT TON_DOSIF.Q</span>
+          </div>
+          <div class="flex items-center gap-2 py-1">
+            <div class="w-1.5 h-9 bg-emerald-500 rounded"></div>
+            <div id="c-r2-run" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[75px]"><div class="text-[8px] text-slate-400">%M0.0 [ | ]</div><div>SYS_RUN</div></div>
+            <div class="w-3 h-0.5 bg-slate-700"></div>
+            <div id="c-r2-s1" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[85px]"><div class="text-[8px] text-slate-400">%I0.2 [ | ]</div><div>PRESENCIA_E1</div></div>
+            <div class="w-3 h-0.5 bg-slate-700"></div>
+            <div id="c-r2-timer" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[80px]"><div class="text-[8px] text-slate-400">TON1 [ / ]</div><div>LLENANDO</div></div>
+            <div class="flex-1 h-0.5 bg-slate-700"></div>
+            <div id="coil-r2-valve" class="border border-slate-700 bg-slate-900 px-3 py-1 rounded-full text-center min-w-[110px]"><div class="text-[8px] text-slate-400">%Q0.2 ( )</div><div class="font-bold">VALV_DOSIF</div></div>
+            <div class="w-1.5 h-9 bg-slate-700 rounded"></div>
+          </div>
+        </div>
+
+        <!-- Rung 3: Tapado -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div class="flex justify-between text-[11px] text-slate-400 mb-1.5">
+            <span class="font-bold text-sky-400">RUNG 003: Accionamiento de Prensa de Tapado Neumático</span>
+            <span>%Q0.3 = SYS_RUN AND SENSOR_BOTELLA_2 AND NOT CIL_EXTENDED</span>
+          </div>
+          <div class="flex items-center gap-2 py-1">
+            <div class="w-1.5 h-9 bg-emerald-500 rounded"></div>
+            <div id="c-r3-run" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[75px]"><div class="text-[8px] text-slate-400">%M0.0 [ | ]</div><div>SYS_RUN</div></div>
+            <div class="w-3 h-0.5 bg-slate-700"></div>
+            <div id="c-r3-s2" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[85px]"><div class="text-[8px] text-slate-400">%I0.3 [ | ]</div><div>PRESENCIA_E2</div></div>
+            <div class="flex-1 h-0.5 bg-slate-700"></div>
+            <div id="coil-r3-capper" class="border border-slate-700 bg-slate-900 px-3 py-1 rounded-full text-center min-w-[110px]"><div class="text-[8px] text-slate-400">%Q0.3 ( )</div><div class="font-bold">CIL_TAPADOR</div></div>
+            <div class="w-1.5 h-9 bg-slate-700 rounded"></div>
+          </div>
+        </div>
+
+        <!-- Rung 4: Inspección de Calidad -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div class="flex justify-between text-[11px] text-slate-400 mb-1.5">
+            <span class="font-bold text-sky-400">RUNG 004: Decisión de Calidad y Carga a Registro de Desplazamiento</span>
+            <span>%M10.0 (BIT_REJECT) = SENSOR_E3 AND (NOT LEVEL_OK OR NOT CAP_OK)</span>
+          </div>
+          <div class="flex items-center gap-2 py-1">
+            <div class="w-1.5 h-9 bg-emerald-500 rounded"></div>
+            <div id="c-r4-s3" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[85px]"><div class="text-[8px] text-slate-400">%I0.4 [ | ]</div><div>SENSOR_E3</div></div>
+            <div class="w-3 h-0.5 bg-slate-700"></div>
+            <div class="flex flex-col gap-1 border-l-2 border-r-2 border-slate-700 px-2">
+              <div id="c-r4-nook-level" class="border border-slate-700 bg-slate-900 px-2 py-0.5 rounded text-center min-w-[85px]"><div class="text-[8px] text-slate-400">%I0.5 [ / ]</div><div>BAJO_NIVEL</div></div>
+              <div id="c-r4-nook-cap" class="border border-slate-700 bg-slate-900 px-2 py-0.5 rounded text-center min-w-[85px]"><div class="text-[8px] text-slate-400">%I0.6 [ / ]</div><div>SIN_TAPA</div></div>
+            </div>
+            <div class="flex-1 h-0.5 bg-slate-700"></div>
+            <div id="coil-r4-rejectbit" class="border border-slate-700 bg-slate-900 px-3 py-1 rounded-full text-center min-w-[110px]"><div class="text-[8px] text-slate-400">%M10.0 ( )</div><div class="font-bold">FLAG_DEFECTO</div></div>
+            <div class="w-1.5 h-9 bg-slate-700 rounded"></div>
+          </div>
+        </div>
+
+        <!-- Rung 5: Expulsor Neumático -->
+        <div class="bg-slate-950 p-3 rounded-xl border border-slate-800">
+          <div class="flex justify-between text-[11px] text-slate-400 mb-1.5">
+            <span class="font-bold text-sky-400">RUNG 005: Disparo del Cilindro Expulsor de Rechazo</span>
+            <span>%Q0.5 = SYS_RUN AND SENSOR_E4 AND FLAG_DEFECTO</span>
+          </div>
+          <div class="flex items-center gap-2 py-1">
+            <div class="w-1.5 h-9 bg-emerald-500 rounded"></div>
+            <div id="c-r5-s4" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[85px]"><div class="text-[8px] text-slate-400">%I0.7 [ | ]</div><div>SENSOR_E4</div></div>
+            <div class="w-3 h-0.5 bg-slate-700"></div>
+            <div id="c-r5-flag" class="border border-slate-700 bg-slate-900 px-2 py-1 rounded text-center min-w-[90px]"><div class="text-[8px] text-slate-400">%M10.0 [ | ]</div><div>FLAG_DEFECTO</div></div>
+            <div class="flex-1 h-0.5 bg-slate-700"></div>
+            <div id="coil-r5-pusher" class="border border-slate-700 bg-slate-900 px-3 py-1 rounded-full text-center min-w-[110px]"><div class="text-[8px] text-slate-400">%Q0.5 ( )</div><div class="font-bold">PISTON_RECHAZO</div></div>
+            <div class="w-1.5 h-9 bg-slate-700 rounded"></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL INTEGRADO: INSTRUCTIVO & GUÍA COMPLETA PARA SOCIOS E INVERSIONISTAS -->
+  <!-- ========================================================================= -->
+  <div id="manual-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-3 md:p-6 overflow-y-auto">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-4xl w-full shadow-2xl overflow-hidden modal-enter my-auto flex flex-col max-h-[90vh]">
+      
+      <!-- Modal Header -->
+      <div class="bg-slate-950 p-4 md:p-5 border-b border-slate-800 flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl p-2 bg-indigo-500/20 text-indigo-400 rounded-lg border border-indigo-500/30">📖</span>
+          <div>
+            <h3 class="font-black text-lg text-white">Manual del Usuario & Guía de Demostración</h3>
+            <p class="text-xs text-slate-400">Instructivo interactivo para evaluar el proyecto y entender su valor de negocio.</p>
+          </div>
+        </div>
+        <button onclick="closeManualModal()" class="text-slate-400 hover:text-white p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-lg transition">
+          ✕
+        </button>
+      </div>
+
+      <!-- Navigation Tabs inside Modal -->
+      <div class="flex border-b border-slate-800 bg-slate-950/50 px-4 pt-2 gap-2 overflow-x-auto text-xs font-semibold">
+        <button id="tab-btn-1" onclick="switchManualTab(1)" class="py-2.5 px-4 text-indigo-400 border-b-2 border-indigo-500 transition">
+          🚀 Guía Rápida (5 Pasos)
+        </button>
+        <button id="tab-btn-2" onclick="switchManualTab(2)" class="py-2.5 px-4 text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition">
+          💼 Retorno de Inversión (ROI)
+        </button>
+        <button id="tab-btn-3" onclick="switchManualTab(3)" class="py-2.5 px-4 text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition">
+          🔌 Arquitectura PLC & Sensores
+        </button>
+      </div>
+
+      <!-- Modal Body (Scrollable) -->
+      <div class="p-5 md:p-6 overflow-y-auto space-y-4 text-xs md:text-sm text-slate-300">
+        
+        <!-- TAB 1: Guía de 5 Pasos -->
+        <div id="tab-content-1" class="space-y-4">
+          <div class="bg-indigo-950/30 border border-indigo-800/40 p-3.5 rounded-xl text-xs text-indigo-200">
+            <strong>Objetivo de esta prueba:</strong> Demostrar que el PLC puede mantener la producción continua a alta velocidad y separar de forma 100% autónoma cualquier producto defectuoso sin detener la línea principal.
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+              <span class="text-emerald-400 font-bold block text-xs">Paso 1: Iniciar el Sistema (RUN)</span>
+              <p class="text-slate-400 text-xs">
+                Haz clic en el botón verde <strong>RUN</strong> en la barra superior. Verás la cinta transportadora comenzar a mover envases y pasar por las estaciones de llenado y tapado.
+              </p>
+            </div>
+
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+              <span class="text-amber-400 font-bold block text-xs">Paso 2: Inyectar Falla de Volumen</span>
+              <p class="text-slate-400 text-xs">
+                En el panel lateral derecho, pulsa <strong>"Inyectar Botella con Nivel Bajo"</strong>. La próxima botella entrará con líquido insuficiente.
+              </p>
+            </div>
+
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+              <span class="text-rose-400 font-bold block text-xs">Paso 3: Ver la Expulsión de Rechazo</span>
+              <p class="text-slate-400 text-xs">
+                Observa cómo el sensor de visión en la <strong>Estación 3</strong> detecta el nivel bajo, prende el láser de inspección y dispara el pistón neumático en la <strong>Estación 4</strong> para mandar la botella defectuosa a la rampa de rechazo.
+              </p>
+            </div>
+
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+              <span class="text-sky-400 font-bold block text-xs">Paso 4: Observar el Ladder en Vivo</span>
+              <p class="text-slate-400 text-xs">
+                Baja al monitor inferior. Verás cómo los contactos <strong>%I</strong> y las bobinas <strong>%Q</strong> se iluminan en color verde brillante en microsegundos, demostrando la ejecución del ciclo scan.
+              </p>
+            </div>
+          </div>
+
+          <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+            <span class="text-indigo-400 font-bold block text-xs">Paso 5: Variar Velocidad y Descargar Reporte CSV</span>
+            <p class="text-slate-400 text-xs">
+              Mueve el slider del Variador VFD entre 20 Hz y 80 Hz para ver el incremento de botellas por minuto (PPM). Luego pulsa <strong>"Exportar Datos de Producción (CSV)"</strong> para ver cómo se enlaza con el ERP de la empresa.
+            </p>
+          </div>
+        </div>
+
+        <!-- TAB 2: Valor de Negocio & ROI -->
+        <div id="tab-content-2" class="space-y-4 hidden">
+          <div class="bg-emerald-950/30 border border-emerald-800/40 p-3.5 rounded-xl text-xs text-emerald-200">
+            <strong>Impacto Económico para la Empresa:</strong> Reducción de mermas, cero multas por peso/volumen incorrecto y trazabilidad 100% auditable.
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+              <span class="text-emerald-400 font-bold block text-sm">Cero Retiros de Mercado</span>
+              <p class="text-slate-400">
+                Al detectar automáticamente envases sin tapa o con volumen inferior antes del empaque, se eliminan quejas de clientes y sanciones legales.
+              </p>
+            </div>
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+              <span class="text-sky-400 font-bold block text-sm">+25% Productividad (OEE)</span>
+              <p class="text-slate-400">
+                La separación de rechazos se realiza en movimiento continuo sin parar la cinta ni requerir operadores manuales en la línea.
+              </p>
+            </div>
+            <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 space-y-1.5">
+              <span class="text-indigo-400 font-bold block text-sm">Integración Digital Industria 4.0</span>
+              <p class="text-slate-400">
+                Cada evento se registra en variables digitales compatibles con sistemas SCADA, MES y ERP (SAP, Oracle, etc.).
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: Arquitectura Técnica -->
+        <div id="tab-content-3" class="space-y-4 hidden">
+          <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs font-mono space-y-2">
+            <span class="text-sky-400 font-bold block">MAPA DE DIRECCIONAMIENTO INDUSTRIAL (IEC 61131-3)</span>
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div><strong>%I0.0:</strong> Parada de Emergencia (NC)</div>
+              <div><strong>%Q0.0:</strong> Motor Cinta Transportadora</div>
+              <div><strong>%I0.2:</strong> Sensor Fotocélula Estación 1</div>
+              <div><strong>%Q0.2:</strong> Electroválvula Dosificado</div>
+              <div><strong>%I0.3:</strong> Sensor Fin de Carrera Estación 2</div>
+              <div><strong>%Q0.3:</strong> Cilindro Tapado Neumático</div>
+              <div><strong>%I0.5:</strong> Sensor Nivel OK (Inspección)</div>
+              <div><strong>%Q0.5:</strong> Pistón Expulsor de Rechazo</div>
+              <div><strong>%I0.6:</strong> Sensor Presencia Tapa OK</div>
+              <div><strong>%M10.0:</strong> Bandera FIFO Descarte</div>
+            </div>
+          </div>
+          <p class="text-slate-400 text-xs">
+            Esta misma lógica puede ser descargada directamente a controladores físicos <strong>Siemens SIMATIC S7-1200 / S7-1500</strong>, <strong>Rockwell Allen-Bradley ControlLogix</strong> o entornos <strong>CODESYS</strong>.
+          </p>
+        </div>
+
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="bg-slate-950 p-4 border-t border-slate-800 flex items-center justify-between">
+        <button onclick="startAutoDemoTour(); closeManualModal();" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2 rounded-lg text-xs transition flex items-center gap-1.5 shadow">
+          <span>✨</span> Ejecutar Demostración Guiada
+        </button>
+        <button onclick="closeManualModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium px-4 py-2 rounded-lg text-xs transition">
+          Cerrar Manual
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    // State machine & metrics
+    const sim = {
+      running: true,
+      eStop: false,
+      speedHz: 50,
+      totalCount: 0,
+      goodCount: 0,
+      rejectCount: 0,
+      ppm: 36,
+      bottles: [],
+      nextBottleId: 1,
+      injectDefectType: null,
+      spawnTimer: 0
+    };
+
+    const plc = {
+      M_RUN: true,
+      I_ESTOP: true,
+      I_CURTAIN: true,
+      I_S1_PRESENT: false,
+      I_S2_PRESENT: false,
+      I_S3_PRESENT: false,
+      I_S4_PRESENT: false,
+      I_S_LEVEL_OK: true,
+      I_S_CAP_OK: true,
+      M_FLAG_DEFECT: false,
+      Q_CONVEYOR: true,
+      Q_VALVE_FILL: false,
+      Q_CYL_CAPPER: false,
+      Q_CYL_REJECT: false
+    };
+
+    const STATIONS = { S1: 18, S2: 44, S3: 70, S4: 88 };
+
+    setInterval(updateLoop, 50);
+
+    function updateLoop() {
+      if (sim.running && !sim.eStop) {
+        plc.M_RUN = true;
+        plc.Q_CONVEYOR = true;
+
+        const spawnInterval = Math.max(25, Math.round(75 - (sim.speedHz - 50) * 0.8));
+        sim.spawnTimer++;
+        if (sim.spawnTimer >= spawnInterval) {
+          spawnBottle();
+          sim.spawnTimer = 0;
+        }
+
+        advanceBottles();
+      } else {
+        plc.M_RUN = false;
+        plc.Q_CONVEYOR = false;
+      }
+
+      plcScan();
+      renderBottles();
+      updateLadderDisplay();
+      updateKPIs();
+    }
+
+    function spawnBottle() {
+      const defect = sim.injectDefectType;
+      sim.injectDefectType = null;
+
+      sim.bottles.push({
+        id: sim.nextBottleId++,
+        pos: 0,
+        filled: false,
+        capped: false,
+        isUnderfilled: defect === 'underfill',
+        isMissingCap: defect === 'missing_cap',
+        isRejected: false,
+        fillLevel: 0
+      });
+    }
+
+    function advanceBottles() {
+      const step = 0.5 * (sim.speedHz / 50);
+      
+      for (let i = sim.bottles.length - 1; i >= 0; i--) {
+        const b = sim.bottles[i];
+        b.pos += step;
+
+        if (Math.abs(b.pos - STATIONS.S1) < 2.5) {
+          if (!b.filled) {
+            b.fillLevel = Math.min(100, b.fillLevel + (b.isUnderfilled ? 8 : 20));
+            if (b.fillLevel >= (b.isUnderfilled ? 40 : 100)) b.filled = true;
+          }
+        }
+
+        if (Math.abs(b.pos - STATIONS.S2) < 2.5) {
+          if (!b.capped && !b.isMissingCap) b.capped = true;
+        }
+
+        if (Math.abs(b.pos - STATIONS.S3) < 2.0) {
+          if (b.isUnderfilled || b.isMissingCap) b.flagDefect = true;
+        }
+
+        if (Math.abs(b.pos - STATIONS.S4) < 2.5) {
+          if (b.flagDefect && !b.isRejected) {
+            b.isRejected = true;
+            sim.rejectCount++;
+            sim.totalCount++;
+            document.getElementById('sys-log').innerText = `BOT_#${b.id} RECHAZADA: Falla de ${b.isUnderfilled ? 'Bajo Nivel' : 'Falta de Tapa'}. Activado pistón %Q0.5.`;
+          }
+        }
+
+        if (b.pos >= 98) {
+          if (!b.isRejected) {
+            sim.goodCount++;
+            sim.totalCount++;
+            document.getElementById('sys-log').innerText = `BOT_#${b.id} CONFORME: Aprobada para empaque.`;
+          }
+          sim.bottles.splice(i, 1);
+        }
+      }
+    }
+
+    function plcScan() {
+      let nearS1 = sim.bottles.find(b => Math.abs(b.pos - STATIONS.S1) < 2.5);
+      let nearS2 = sim.bottles.find(b => Math.abs(b.pos - STATIONS.S2) < 2.5);
+      let nearS3 = sim.bottles.find(b => Math.abs(b.pos - STATIONS.S3) < 2.0);
+      let nearS4 = sim.bottles.find(b => Math.abs(b.pos - STATIONS.S4) < 2.5 && b.flagDefect);
+
+      plc.I_S1_PRESENT = !!nearS1;
+      plc.I_S2_PRESENT = !!nearS2;
+      plc.I_S3_PRESENT = !!nearS3;
+      plc.I_S4_PRESENT = !!nearS4;
+
+      plc.Q_VALVE_FILL = plc.M_RUN && plc.I_S1_PRESENT && nearS1 && nearS1.fillLevel < 100;
+      plc.Q_CYL_CAPPER = plc.M_RUN && plc.I_S2_PRESENT;
+      
+      if (nearS3) {
+        plc.I_S_LEVEL_OK = !nearS3.isUnderfilled;
+        plc.I_S_CAP_OK = !nearS3.isMissingCap;
+        plc.M_FLAG_DEFECT = !plc.I_S_LEVEL_OK || !plc.I_S_CAP_OK;
+      } else {
+        plc.I_S_LEVEL_OK = true;
+        plc.I_S_CAP_OK = true;
+        plc.M_FLAG_DEFECT = false;
+      }
+
+      plc.Q_CYL_REJECT = plc.M_RUN && plc.I_S4_PRESENT;
+
+      document.getElementById('liquid-stream').style.opacity = plc.Q_VALVE_FILL ? '1' : '0';
+      document.getElementById('capper-rod').style.height = plc.Q_CYL_CAPPER ? '12px' : '4px';
+      document.getElementById('vision-laser').style.opacity = plc.I_S3_PRESENT ? '1' : '0';
+      document.getElementById('reject-pusher').style.transform = plc.Q_CYL_REJECT ? 'translateY(12px)' : 'translateY(0)';
+      
+      const track = document.getElementById('conveyor-track');
+      if (plc.Q_CONVEYOR) track.classList.remove('conveyor-stopped');
+      else track.classList.add('conveyor-stopped');
+    }
+
+    function renderBottles() {
+      const container = document.getElementById('bottles-container');
+      container.innerHTML = '';
+
+      sim.bottles.forEach(b => {
+        if (b.isRejected && b.pos >= STATIONS.S4) return;
+
+        const bottleEl = document.createElement('div');
+        bottleEl.className = 'absolute flex flex-col items-center transition-all duration-75';
+        bottleEl.style.left = `${b.pos}%`;
+        bottleEl.style.bottom = '0px';
+
+        const capHtml = b.capped ? '<div class="w-2.5 h-1.5 bg-rose-500 rounded-t-sm shadow"></div>' : '<div class="w-2.5 h-1.5 border-b border-slate-600"></div>';
+        const fillHeight = `${b.fillLevel}%`;
+        const liquidColor = b.isUnderfilled ? 'bg-amber-600' : 'bg-amber-400';
+
+        bottleEl.innerHTML = `
+          ${capHtml}
+          <div class="w-4 h-9 bg-slate-800/80 border border-slate-500 rounded-b flex flex-col justify-end overflow-hidden shadow">
+            <div class="w-full ${liquidColor} transition-all" style="height: ${fillHeight};"></div>
+          </div>
+          <span class="text-[8px] font-mono text-slate-400">#${b.id}</span>
+        `;
+        container.appendChild(bottleEl);
+      });
+    }
+
+    function updateLadderDisplay() {
+      updateEl('c-r1-run', plc.M_RUN, 'contact-on');
+      updateEl('c-r1-estop', plc.I_ESTOP, 'contact-on');
+      updateEl('c-r1-safety', plc.I_CURTAIN, 'contact-on');
+      updateEl('coil-r1-conveyor', plc.Q_CONVEYOR, 'coil-on');
+
+      updateEl('c-r2-run', plc.M_RUN, 'contact-on');
+      updateEl('c-r2-s1', plc.I_S1_PRESENT, 'contact-on');
+      updateEl('c-r2-timer', plc.Q_VALVE_FILL, 'contact-on');
+      updateEl('coil-r2-valve', plc.Q_VALVE_FILL, 'coil-on');
+
+      updateEl('c-r3-run', plc.M_RUN, 'contact-on');
+      updateEl('c-r3-s2', plc.I_S2_PRESENT, 'contact-on');
+      updateEl('coil-r3-capper', plc.Q_CYL_CAPPER, 'coil-on');
+
+      updateEl('c-r4-s3', plc.I_S3_PRESENT, 'contact-on');
+      updateEl('c-r4-nook-level', !plc.I_S_LEVEL_OK, 'contact-on');
+      updateEl('c-r4-nook-cap', !plc.I_S_CAP_OK, 'contact-on');
+      updateEl('coil-r4-rejectbit', plc.M_FLAG_DEFECT, 'coil-on');
+
+      updateEl('c-r5-s4', plc.I_S4_PRESENT, 'contact-on');
+      updateEl('c-r5-flag', plc.Q_CYL_REJECT, 'contact-on');
+      updateEl('coil-r5-pusher', plc.Q_CYL_REJECT, 'coil-on');
+    }
+
+    function updateEl(id, condition, cls) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (condition) el.classList.add(cls);
+      else el.classList.remove(cls);
+    }
+
+    function updateKPIs() {
+      document.getElementById('kpi-total').innerText = sim.totalCount;
+      document.getElementById('kpi-good').innerText = sim.goodCount;
+      document.getElementById('kpi-reject').innerText = sim.rejectCount;
+
+      const rate = sim.totalCount > 0 ? ((sim.goodCount / sim.totalCount) * 100).toFixed(1) : 100;
+      document.getElementById('kpi-quality').innerText = `${rate}%`;
+
+      const ppm = sim.running && !sim.eStop ? Math.round((sim.speedHz / 50) * 36) : 0;
+      document.getElementById('kpi-ppm').innerText = `${ppm} PPM`;
+
+      document.getElementById('tray-ok').innerText = `${sim.goodCount} botellas`;
+      document.getElementById('tray-ng').innerText = `${sim.rejectCount} botellas`;
+    }
+
+    // USER ACTIONS
+    function startSystem() {
+      sim.running = true;
+      document.getElementById('scada-state-badge').innerText = 'ESTADO: EN EJECUCIÓN CONTINUA';
+      document.getElementById('scada-state-badge').className = 'px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono';
+      document.getElementById('sys-log').innerText = 'Sistema iniciado por operador (RUN).';
+    }
+
+    function stopSystem() {
+      sim.running = false;
+      document.getElementById('scada-state-badge').innerText = 'ESTADO: PAUSADO';
+      document.getElementById('scada-state-badge').className = 'px-2.5 py-1 text-xs rounded-full bg-amber-950 text-amber-300 border border-amber-800 font-mono';
+      document.getElementById('sys-log').innerText = 'Cinta transportadora en pausa manual.';
+    }
+
+    function toggleEStop() {
+      sim.eStop = !sim.eStop;
+      plc.I_ESTOP = !sim.eStop;
+      const btn = document.getElementById('btn-estop');
+      if (sim.eStop) {
+        btn.classList.add('ring-4', 'ring-red-400');
+        document.getElementById('scada-state-badge').innerText = 'PARADA DE EMERGENCIA ACTIVA';
+        document.getElementById('scada-state-badge').className = 'px-2.5 py-1 text-xs rounded-full bg-red-950 text-red-300 border border-red-700 font-mono';
+        document.getElementById('sys-log').innerText = 'CRÍTICO: Seta de emergencia accionada (%I0.0). Todos los actuadores desenergizados.';
+      } else {
+        btn.classList.remove('ring-4', 'ring-red-400');
+        document.getElementById('scada-state-badge').innerText = 'ESTADO: EN EJECUCIÓN CONTINUA';
+        document.getElementById('scada-state-badge').className = 'px-2.5 py-1 text-xs rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono';
+        document.getElementById('sys-log').innerText = 'Emergencia restablecida. Línea en servicio.';
+      }
+    }
+
+    function injectUnderfill() {
+      sim.injectDefectType = 'underfill';
+      document.getElementById('sys-log').innerText = 'SIMULACIÓN: Próxima botella entrará con defecto de BAJO NIVEL.';
+    }
+
+    function injectMissingCap() {
+      sim.injectDefectType = 'missing_cap';
+      document.getElementById('sys-log').innerText = 'SIMULACIÓN: Próxima botella entrará con defecto de FALTA DE TAPA.';
+    }
+
+    function changeSpeed(val) {
+      sim.speedHz = parseInt(val);
+      document.getElementById('speed-label').innerText = `${sim.speedHz} Hz (${Math.round((sim.speedHz/50)*100)}%)`;
+      document.getElementById('sys-log').innerText = `Variador VFD regulado a ${sim.speedHz} Hz.`;
+    }
+
+    function downloadReport() {
+      const csvContent = "data:text/csv;charset=utf-8," 
+        + "KPI,Valor,Unidad\n"
+        + `Total_Procesado,${sim.totalCount},unidades\n`
+        + `Conformes_OK,${sim.goodCount},unidades\n`
+        + `Rechazadas_NG,${sim.rejectCount},unidades\n`
+        + `Tasa_Calidad,${((sim.goodCount/Math.max(1,sim.totalCount))*100).toFixed(2)},%\n`
+        + `Velocidad_Actual,${sim.ppm},PPM\n`
+        + `Frecuencia_VFD,${sim.speedHz},Hz\n`;
+      
+      const encodedUri = encodeURI(csvContent);
+      const link = document.createElement("a");
+      link.setAttribute("href", encodedUri);
+      link.setAttribute("download", `reporte_produccion_linea_plc_${new Date().toISOString().slice(0,10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // MODAL FUNCTIONS
+    function openManualModal() {
+      const modal = document.getElementById('manual-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeManualModal() {
+      const modal = document.getElementById('manual-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function switchManualTab(tabNum) {
+      for (let i = 1; i <= 3; i++) {
+        const content = document.getElementById(`tab-content-${i}`);
+        const btn = document.getElementById(`tab-btn-${i}`);
+        if (i === tabNum) {
+          content.classList.remove('hidden');
+          btn.className = 'py-2.5 px-4 text-indigo-400 border-b-2 border-indigo-500 transition';
+        } else {
+          content.classList.add('hidden');
+          btn.className = 'py-2.5 px-4 text-slate-400 hover:text-slate-200 border-b-2 border-transparent transition';
+        }
+      }
+    }
+
+    // DEMO TOUR AUTOMATIZADO 1-CLIC PARA PARTNERS
+    function startAutoDemoTour() {
+      startSystem();
+      document.getElementById('sys-log').innerText = '✨ DEMO GUIADA INICIADA: Ejecutando secuencia de presentación para socios...';
+      
+      setTimeout(() => {
+        injectUnderfill();
+        document.getElementById('sys-log').innerText = '✨ DEMO (Paso 1/2): Botella con defecto inyectada. Observa Estación 3 y 4.';
+      }, 1500);
+
+      setTimeout(() => {
+        injectMissingCap();
+        document.getElementById('sys-log').innerText = '✨ DEMO (Paso 2/2): Botella sin tapa inyectada. El PLC la expulsará.';
+      }, 4000);
+    }
+  </script>
+</body>
+</html>
